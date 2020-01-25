@@ -10,7 +10,8 @@ GAMMA = 0.96
 
 
 def transform_state(state):
-    state = (np.array(state) + np.array((1.2, 0.0))) / np.array((1.8, 0.07))
+    state = np.array(state)
+    state = np.concatenate((state + np.array((1.2, 0.0)) / np.array((1.8, 0.07)), np.sin(state), np.cos(state)))
     result = []
     result.extend(state)
     return np.array(result)
@@ -19,17 +20,29 @@ def transform_state(state):
 class AQL:
     def __init__(self, state_dim, action_dim):
         self.gamma = GAMMA ** N_STEP
+        self.Q = torch.nn.Linear(6, 3)
+
+    def act(self, state, target=False):
+        return max(
+            (action for action in range(3)),
+            key=lambda action: self.Q(torch.FloatTensor(state))[action],
+        )
 
     def update(self, transition):
         state, action, next_state, reward, done = transition
-
-    def act(self, state, target=False):
-        return 0
+        L2 = 0.99
+        alpha = 0.01
+        *d_weight, d_bias = alpha * torch.FloatTensor(np.concatenate((state, (1,)))) * (self.Q(torch.FloatTensor(next_state))[action] - reward)
+        with torch.no_grad():
+            self.Q.weight[action, :] += torch.FloatTensor(d_weight)
+            self.Q.weight *= L2
+            self.Q.bias[action] += d_bias
+            self.Q.bias *= L2
 
     def save(self, path):
-        weight = np.array(self.weight)
-        bias = np.array(self.bias)
-        np.savez("agent.npz", weight, bias)
+        with torch.no_grad():
+            print(self.Q.weight, self.Q.bias)
+            # np.savez("agent.npz", np.array(self.Q.weight), np.array(self.Q.bias))
 
 
 if __name__ == "__main__":
@@ -61,10 +74,10 @@ if __name__ == "__main__":
             if len(reward_buffer) == N_STEP:
                 aql.update((state_buffer[0], action_buffer[0], next_state, sum([(GAMMA ** i) * r for i, r in enumerate(reward_buffer)]), done))
             state = next_state
+            env.render()
         if len(reward_buffer) == N_STEP:
             rb = list(reward_buffer)
             for k in range(1, N_STEP):
                 aql.update((state_buffer[k], action_buffer[k], next_state, sum([(GAMMA ** i) * r for i, r in enumerate(rb[k:])]), done))
-
-        if i % 20 == 0:
-            aql.save()
+        if i % 1 == 0:
+            aql.save('foo')
