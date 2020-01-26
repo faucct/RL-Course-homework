@@ -21,6 +21,11 @@ class AQL:
     def __init__(self, state_dim, action_dim):
         self.gamma = GAMMA ** N_STEP
         self.Q = torch.nn.Linear(6, 3)
+        with torch.no_grad():
+            self.Q.weight[:] = torch.zeros((3, 6))
+            self.Q.weight[0, 1] = -100
+            self.Q.weight[2, 1] = 100
+            self.Q.bias[:] = 0
 
     def act(self, state, target=False):
         return max(
